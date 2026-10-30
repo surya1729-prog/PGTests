@@ -87,9 +87,9 @@ export default function App() {
         {selectedPaper && <PaperView title={selectedPaper} isSaved={savedPapers.includes(selectedPaper)} onBack={() => setSelectedPaper(null)} onToggleSaved={() => toggleSaved(selectedPaper)} />}
 
         {activeTab === 'Home' && !selectedPaper && <><View style={styles.sectionHeading}><View><Text style={styles.sectionKicker}>BROWSE BY EXAM</Text><Text style={styles.sectionTitle}>Examination papers</Text></View><Pressable onPress={() => setActiveTab('Exams')} style={styles.textAction}><Text style={styles.sectionAction}>View all</Text><ArrowRight size={14} color="#0f766e" /></Pressable></View>
-        <View style={[styles.examList, isWide && styles.examListWide, isDesktop && styles.examListDesktop]}>
+        <View style={[styles.examList, isDesktop && styles.examListWide, isDesktop && styles.examListDesktop]}>
           {filteredExams.map((exam) => (
-            <Pressable key={exam.name} style={styles.examRow} onPress={() => openExam(exam.name)}>
+            <Pressable key={exam.name} style={[styles.examRow, isDesktop && styles.examRowDesktop]} onPress={() => openExam(exam.name)}>
               <View style={[styles.examIcon, { backgroundColor: exam.accent }]}><BookOpen size={18} color="#fff" strokeWidth={1.8} /></View>
               <View style={styles.examCopy}><Text style={styles.examName}>{exam.name}</Text><Text style={styles.examDetail}>{exam.detail}</Text><Text style={styles.examCount}>{exam.count} · papers available</Text></View>
               <ChevronRight size={19} color="#91a0ad" />
@@ -209,7 +209,8 @@ const styles = StyleSheet.create({
   examList: { gap: 9 },
   examListWide: { flexDirection: 'row', flexWrap: 'wrap' },
   examListDesktop: { gap: 12 },
-  examRow: { minHeight: 76, flexGrow: 1, flexBasis: 240, backgroundColor: '#fff', borderRadius: 13, borderWidth: 1, borderColor: '#e3eaf0', flexDirection: 'row', alignItems: 'center', padding: 12 },
+  examRow: { minHeight: 76, backgroundColor: '#fff', borderRadius: 13, borderWidth: 1, borderColor: '#e3eaf0', flexDirection: 'row', alignItems: 'center', padding: 12 },
+  examRowDesktop: { flexGrow: 1, flexBasis: 240 },
   examIcon: { width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   examCopy: { flex: 1, marginLeft: 12 },
   examName: { color: '#16364e', fontSize: 14, fontWeight: '800', marginBottom: 3 },
