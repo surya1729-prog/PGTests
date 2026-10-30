@@ -1,0 +1,27 @@
+{
+  "name": "medical-pg-papers",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
+    "expo": "~58.0.21",
+    "expo-status-bar": "~58.0.4",
+    "lucide-react-native": "^1.65.0",
+    "react": "19.3.0",
+    "react-native": "0.88.1",
+    "react-native-url-polyfill": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.3.0",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "export:android": "expo export --platform android"
+  },
+  "private": true
+}
