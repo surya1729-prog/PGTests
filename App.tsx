@@ -52,7 +52,7 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={[styles.content, isWide && styles.wideContent]} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, isWide && styles.wideContent, isDesktop && styles.desktopContent]} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View style={styles.brandLockup}>
             <View style={styles.brandMark}><Text style={styles.brandMarkText}>+</Text></View>
@@ -64,7 +64,7 @@ export default function App() {
 
         {showNotifications && <View style={styles.popover}><Text style={styles.popoverTitle}>Notifications</Text><Text style={styles.popoverText}>New papers will appear here when published.</Text><Pressable onPress={() => setShowNotifications(false)}><Text style={styles.popoverAction}>Dismiss</Text></Pressable></View>}
 
-        {activeTab === 'Home' && !selectedPaper && <View style={styles.introRow}>
+        {activeTab === 'Home' && !selectedPaper && <View style={[styles.introRow, !isDesktop && styles.introRowMobile]}>
           <View><Text style={styles.eyebrow}>GOOD MORNING, STUDENT</Text><Text style={styles.title}>Your revision desk</Text></View>
           <View style={styles.studyStatus}><CheckCircle2 size={15} color="#157a70" /><Text style={styles.studyStatusText}>Ready to study</Text></View>
         </View>}
@@ -86,7 +86,7 @@ export default function App() {
         {activeTab !== 'Home' && !selectedPaper && <WorkspaceView activeTab={activeTab} selectedExam={selectedExam} savedPapers={savedPapers} onBack={() => { setActiveTab('Home'); setSelectedExam(null); }} onOpenExam={openExam} onOpenPaper={openPaper} onToggleSaved={toggleSaved} />}
         {selectedPaper && <PaperView title={selectedPaper} isSaved={savedPapers.includes(selectedPaper)} onBack={() => setSelectedPaper(null)} onToggleSaved={() => toggleSaved(selectedPaper)} />}
 
-        {activeTab === 'Home' && !selectedPaper && <><View style={styles.sectionHeading}><View><Text style={styles.sectionKicker}>BROWSE BY EXAM</Text><Text style={styles.sectionTitle}>Examination papers</Text></View><Pressable onPress={() => setActiveTab('Exams')} style={styles.textAction}><Text style={styles.sectionAction}>View all</Text><ArrowRight size={14} color="#0f766e" /></Pressable></View>
+        {activeTab === 'Home' && !selectedPaper && <><View style={[styles.homeColumns, isDesktop && styles.homeColumnsDesktop]}><View style={styles.primaryColumn}><View style={styles.sectionHeading}><View><Text style={styles.sectionKicker}>BROWSE BY EXAM</Text><Text style={styles.sectionTitle}>Examination papers</Text></View><Pressable onPress={() => setActiveTab('Exams')} style={styles.textAction}><Text style={styles.sectionAction}>View all</Text><ArrowRight size={14} color="#0f766e" /></Pressable></View>
         <View style={[styles.examList, isDesktop && styles.examListWide, isDesktop && styles.examListDesktop]}>
           {filteredExams.map((exam) => (
             <Pressable key={exam.name} style={[styles.examRow, isDesktop && styles.examRowDesktop]} onPress={() => openExam(exam.name)}>
@@ -112,8 +112,7 @@ export default function App() {
           <View style={styles.studyCardIcon}><Clock3 size={19} color="#0f766e" /></View>
           <View style={styles.studyCardCopy}><Text style={styles.studyCardTitle}>Continue your preparation</Text><Text style={styles.studyCardText}>Save a paper to build your personal revision list.</Text></View>
           <ArrowRight size={18} color="#0f766e" />
-        </View>
-        </>}
+        </View></View>{isDesktop && <View style={styles.desktopAside}><Text style={styles.sectionKicker}>STUDY SNAPSHOT</Text><Text style={styles.asideTitle}>Keep your next revision session close.</Text><Text style={styles.asideText}>Browse a year, open a paper, and save it to return to later.</Text><View style={styles.asideRule} /><View style={styles.asideStat}><Text style={styles.asideStatValue}>{savedPapers.length}</Text><Text style={styles.asideStatLabel}>saved papers</Text></View><Pressable style={styles.asideAction} onPress={() => setActiveTab('Saved')}><Text style={styles.asideActionText}>Open saved papers</Text><ArrowRight size={15} color="#0f766e" /></Pressable></View>}</View></>}
       </ScrollView>
 
       <View style={styles.tabBar}>
@@ -171,7 +170,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 112 },
-  wideContent: { width: '100%', maxWidth: 820, alignSelf: 'center' },
+  wideContent: { width: '100%', maxWidth: 1180, alignSelf: 'center', paddingHorizontal: 32 },
+  desktopContent: { paddingHorizontal: 44 },
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 34 },
   brandLockup: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   brandMark: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#123b55', alignItems: 'center', justifyContent: 'center' },
@@ -187,6 +187,7 @@ const styles = StyleSheet.create({
   profileButton: { marginLeft: 9, width: 36, height: 36, borderRadius: 10, backgroundColor: '#dcefeb', alignItems: 'center', justifyContent: 'center' },
   profileButtonText: { color: '#176a68', fontWeight: '800', fontSize: 13 },
   introRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 18 },
+  introRowMobile: { flexDirection: 'column', alignItems: 'flex-start' },
   eyebrow: { color: '#0f766e', fontSize: 9, fontWeight: '800', letterSpacing: 1.4, marginBottom: 7 },
   title: { color: '#16364e', fontSize: 27, lineHeight: 33, fontWeight: '800' },
   studyStatus: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 3 },
@@ -206,6 +207,18 @@ const styles = StyleSheet.create({
   sectionTitle: { color: '#16364e', fontSize: 18, fontWeight: '800' },
   textAction: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingBottom: 2 },
   sectionAction: { color: '#0f766e', fontSize: 11, fontWeight: '800' },
+  homeColumns: { alignItems: 'stretch' },
+  homeColumnsDesktop: { flexDirection: 'row', alignItems: 'flex-start', gap: 28 },
+  primaryColumn: { flex: 1, minWidth: 0 },
+  desktopAside: { width: 260, marginTop: 29, padding: 20, borderRadius: 14, backgroundColor: '#eaf5f3', borderWidth: 1, borderColor: '#d4ebe6' },
+  asideTitle: { color: '#164d55', fontSize: 18, lineHeight: 24, fontWeight: '800', marginTop: 9 },
+  asideText: { color: '#628189', fontSize: 12, lineHeight: 18, marginTop: 8 },
+  asideRule: { height: 1, backgroundColor: '#cde4df', marginVertical: 18 },
+  asideStat: { flexDirection: 'row', alignItems: 'baseline', gap: 7 },
+  asideStatValue: { color: '#0f766e', fontSize: 25, fontWeight: '800' },
+  asideStatLabel: { color: '#628189', fontSize: 11, fontWeight: '700' },
+  asideAction: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 18 },
+  asideActionText: { color: '#0f766e', fontSize: 11, fontWeight: '800' },
   examList: { gap: 9 },
   examListWide: { flexDirection: 'row', flexWrap: 'wrap' },
   examListDesktop: { gap: 12 },
