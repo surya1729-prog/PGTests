@@ -36,6 +36,5 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
-# generated native folders
+# Capacitor Android project is source code and should be committed
 /ios
-/android
