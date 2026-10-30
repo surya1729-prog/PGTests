@@ -1,7 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { useMemo, useState } from 'react';
 import { Alert, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
-import { ArrowLeft, ArrowRight, Bell, Bookmark, BookOpen, CheckCircle2, ChevronRight, Clock3, FileText, Home, Library, Search, SlidersHorizontal, UserRound, X } from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, Bell, Bookmark, BookOpen, CheckCircle2, ChevronRight, Clock3, FileText, Home, Library, Search, SlidersHorizontal, Target, UserRound } from 'lucide-react-native';
 
 type Exam = { name: string; detail: string; count: string; accent: string };
 type Paper = { title: string; type: string; date: string; color: string };
@@ -65,8 +65,27 @@ export default function App() {
         {showNotifications && <View style={styles.popover}><Text style={styles.popoverTitle}>Notifications</Text><Text style={styles.popoverText}>New papers will appear here when published.</Text><Pressable onPress={() => setShowNotifications(false)}><Text style={styles.popoverAction}>Dismiss</Text></Pressable></View>}
 
         {activeTab === 'Home' && !selectedPaper && <View style={[styles.introRow, !isDesktop && styles.introRowMobile]}>
-          <View><Text style={styles.eyebrow}>GOOD MORNING, STUDENT</Text><Text style={styles.title}>Your revision desk</Text></View>
-          <View style={styles.studyStatus}><CheckCircle2 size={15} color="#157a70" /><Text style={styles.studyStatusText}>Ready to study</Text></View>
+          <View style={[styles.focusPanel, !isDesktop && styles.focusPanelMobile]}>
+            <View style={styles.focusCopy}>
+              <View style={styles.focusEyebrow}>
+                <Target size={13} color="#a8e1d7" />
+                <Text style={styles.focusEyebrowText}>GOOD MORNING, STUDENT</Text>
+              </View>
+              <Text style={styles.focusTitle}>Your revision desk</Text>
+              <Text style={styles.focusText}>A focused place for the papers that matter to your next attempt.</Text>
+              <View style={styles.focusStatus}>
+                <CheckCircle2 size={15} color="#9fe0d5" />
+                <Text style={styles.focusStatusText}>Ready to study</Text>
+              </View>
+            </View>
+            <View style={[styles.focusStats, !isDesktop && styles.focusStatsMobile]}>
+              <View style={styles.focusStat}><Text style={styles.focusStatValue}>03</Text><Text style={styles.focusStatLabel}>exams</Text></View>
+              <View style={styles.focusStatDivider} />
+              <View style={styles.focusStat}><Text style={styles.focusStatValue}>07</Text><Text style={styles.focusStatLabel}>years</Text></View>
+              <View style={styles.focusStatDivider} />
+              <View style={styles.focusStat}><Text style={styles.focusStatValue}>{String(savedPapers.length).padStart(2, '0')}</Text><Text style={styles.focusStatLabel}>saved</Text></View>
+            </View>
+          </View>
         </View>}
 
         {activeTab === 'Home' && !selectedPaper && <View style={styles.searchBox}>
@@ -188,6 +207,21 @@ const styles = StyleSheet.create({
   profileButtonText: { color: '#176a68', fontWeight: '800', fontSize: 13 },
   introRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 18 },
   introRowMobile: { flexDirection: 'column', alignItems: 'flex-start' },
+  focusPanel: { width: '100%', minHeight: 178, borderRadius: 18, backgroundColor: '#123b55', padding: 22, flexDirection: 'row', alignItems: 'stretch', justifyContent: 'space-between', marginBottom: 26, overflow: 'hidden' },
+  focusPanelMobile: { flexDirection: 'column', minHeight: 218 },
+  focusCopy: { flex: 1, maxWidth: 470 },
+  focusEyebrow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  focusEyebrowText: { color: '#a8e1d7', fontSize: 9, fontWeight: '800', letterSpacing: 1.4 },
+  focusTitle: { color: '#fff', fontSize: 29, lineHeight: 35, fontWeight: '800', marginTop: 13 },
+  focusText: { color: '#bdd2d8', fontSize: 12, lineHeight: 18, marginTop: 7, maxWidth: 350 },
+  focusStatus: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 18 },
+  focusStatusText: { color: '#c4e9e3', fontSize: 11, fontWeight: '800' },
+  focusStats: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', paddingLeft: 22, paddingBottom: 3 },
+  focusStatsMobile: { alignSelf: 'flex-start', paddingLeft: 0, paddingBottom: 0, marginTop: 18 },
+  focusStat: { minWidth: 52, alignItems: 'center' },
+  focusStatValue: { color: '#fff', fontSize: 22, fontWeight: '800' },
+  focusStatLabel: { color: '#a8c6ce', fontSize: 10, fontWeight: '700', marginTop: 3 },
+  focusStatDivider: { width: 1, height: 34, backgroundColor: '#41657a', marginHorizontal: 10 },
   eyebrow: { color: '#0f766e', fontSize: 9, fontWeight: '800', letterSpacing: 1.4, marginBottom: 7 },
   title: { color: '#16364e', fontSize: 27, lineHeight: 33, fontWeight: '800' },
   studyStatus: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 3 },
