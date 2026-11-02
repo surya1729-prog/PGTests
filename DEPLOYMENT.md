@@ -11,7 +11,8 @@ The source of truth is the `main` branch of `surya1729-prog/PGTests`. Keep `.env
 3. Run `supabase/migrations/002_storage_and_auth.sql` once.
 4. Run `supabase/migrations/003_allow_historical_docx_papers.sql` once.
 5. Run `supabase/migrations/004_pg_orthopaedics_seed.sql` once.
-6. Create an account through the app, then promote it to admin from a trusted SQL session:
+6. Run `supabase/migrations/005_ordered_question_bank.sql` once.
+7. Create an account through Supabase Auth, then promote it to admin from a trusted SQL session:
 
 ```sql
 update public.profiles
@@ -19,7 +20,7 @@ set role = 'admin'
 where email = 'your-admin-email@example.com';
 ```
 
-The migrations create the private `papers` bucket, allow PDF and DOCX files up to 50 MB, allow historical years from 1900, seed the `PG Orthopaedics` collection, create the auth profile trigger, and apply student/admin Storage policies.
+The migrations create the private `papers` bucket, allow PDF and DOCX files up to 50 MB, allow historical years from 1900, seed the `PG Orthopaedics` collection, create the ordered question-bank tables, create the auth profile trigger, and apply student/admin policies.
 
 ## Vercel
 
