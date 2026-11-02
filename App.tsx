@@ -41,7 +41,7 @@ export default function App() {
     setLoading(true);
     const exam = await supabase.from('exams').select('id').eq('slug', EXAM_SLUG).single();
     if (exam.error || !exam.data) { setStatus('Run migration 005_ordered_question_bank.sql in Supabase first.'); setLoading(false); return; }
-    const result = await supabase.from('question_papers').select('id,year,session,paper_number,title,is_published').eq('exam_id', exam.data.id).eq('is_published', true).order('year', { ascending: false }).order('paper_number');
+    const result = await supabase.from('question_papers').select('id,year,session,paper_number,title,is_published').eq('exam_id', exam.data.id).eq('is_published', true).gte('year', 2000).lte('year', 2021).order('year', { ascending: false }).order('paper_number');
     if (result.error) setStatus(result.error.message); else { setPapers(result.data ?? []); setStatus(''); }
     setLoading(false);
   };
@@ -54,8 +54,9 @@ export default function App() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  const years = useMemo(() => [...new Set(papers.map((item) => item.year))].sort((a, b) => b - a), [papers]);
-  const filteredYears = years.filter((item) => String(item).includes(search.trim()));
+  const years = useMemo(() => [...new Set(papers.map((item) => item.year).filter((item) => item >= 2000 && item <= 2021))].sort((a, b) => b - a), [papers]);
+  const normalizedSearch = search.trim().replace(/[^0-9]/g, '');
+  const filteredYears = normalizedSearch ? years.filter((item) => String(item).includes(normalizedSearch)) : years;
   const selectedPapers = year === null ? [] : papers.filter((item) => item.year === year);
 
   const openPaper = async (item: Paper) => {
@@ -70,7 +71,7 @@ export default function App() {
     {adminOpen ? <AdminPanel user={user} onSignOut={signOut} onClose={() => setAdminOpen(false)} onSaved={loadPapers} /> : paper ? <QuestionPaper paper={paper} questions={questions} status={status} onBack={() => setPaper(null)} /> : <>
       <View style={styles.hero}><Text style={styles.eyebrow}>PG ORTHOPAEDICS</Text><Text style={styles.heroTitle}>Previous-year questions, in order.</Text><Text style={styles.heroText}>Choose a year, choose Paper I or Paper II, and revise the exact questions as they appeared.</Text><View style={styles.heroStats}><Text style={styles.heroStat}>{years.length} years</Text><Text style={styles.heroStat}>{papers.length} papers</Text><Text style={styles.heroStat}>Ordered questions</Text></View></View>
       <View style={styles.sectionHeader}><View><Text style={styles.kicker}>QUESTION ARCHIVE</Text><Text style={styles.sectionTitle}>Search by year</Text></View><Text style={styles.mutedText}>{years.length ? `${years[years.length - 1]} - ${years[0]}` : 'No years yet'}</Text></View>
-      <View style={styles.searchBox}><Search size={18} color={colors.muted} /><TextInput value={search} onChangeText={setSearch} placeholder="Type a year, e.g. 1996" placeholderTextColor="#91a0ad" style={styles.searchInput} keyboardType="numeric" /></View>
+      <View style={styles.searchBox}><Search size={21} color={colors.teal} /><TextInput value={search} onChangeText={setSearch} placeholder="Search years 2000 to 2021" placeholderTextColor="#91a0ad" style={styles.searchInput} keyboardType="numeric" /></View>
       {status ? <Text style={styles.error}>{status}</Text> : null}
       {loading ? <Text style={styles.empty}>Loading questions...</Text> : filteredYears.length ? <View style={styles.yearGrid}>{filteredYears.map((item) => <Pressable key={item} style={[styles.yearCard, year === item && styles.yearCardActive]} onPress={() => setYear(year === item ? null : item)}><View><Text style={[styles.yearNumber, year === item && styles.activeText]}>{item}</Text><Text style={[styles.yearCaption, year === item && styles.activeSubtext]}>{papers.filter((entry) => entry.year === item).length} paper{papers.filter((entry) => entry.year === item).length === 1 ? '' : 's'}</Text></View><ChevronRight size={19} color={year === item ? '#fff' : colors.teal} /></Pressable>)}</View> : <View style={styles.emptyPanel}><ClipboardList size={25} color={colors.teal} /><Text style={styles.emptyTitle}>No questions for this search</Text><Text style={styles.empty}>Your question papers will appear here year by year.</Text></View>}
       {year !== null && <View style={styles.paperList}><View style={styles.sectionHeader}><View><Text style={styles.kicker}>YEAR {year}</Text><Text style={styles.sectionTitle}>Choose a paper</Text></View><Pressable onPress={() => setYear(null)}><X size={19} color={colors.muted} /></Pressable></View>{selectedPapers.map((item) => <Pressable key={item.id} style={styles.paperCard} onPress={() => openPaper(item)}><View style={styles.paperNumber}><Text style={styles.paperNumberText}>P{item.paper_number}</Text></View><View style={styles.paperCopy}><Text style={styles.paperTitle}>{item.title}</Text><Text style={styles.paperMeta}>{item.session} · {item.paper_number === 1 ? 'Paper I' : 'Paper II'}</Text></View><ChevronRight size={19} color={colors.teal} /></Pressable>)}</View>}
