@@ -1,303 +1,93 @@
 import { StatusBar } from 'expo-status-bar';
-import { useMemo, useState } from 'react';
-import { Alert, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
-import { ArrowLeft, ArrowRight, Bell, Bookmark, BookOpen, CheckCircle2, ChevronRight, Clock3, FileText, Home, Library, Search, SlidersHorizontal, Target, UserRound } from 'lucide-react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import { useEffect, useMemo, useState } from 'react';
+import { Linking, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { ArrowLeft, ArrowUpRight, BookOpen, Check, ChevronRight, FileText, FolderOpen, LockKeyhole, LogOut, Search, ShieldCheck, Upload, X } from 'lucide-react-native';
+import { supabase } from './lib/supabase';
 
-type Exam = { name: string; detail: string; count: string; accent: string };
-type Paper = { title: string; type: string; date: string; color: string };
-
-const exams: Exam[] = [
-  { name: 'NEET PG', detail: 'National Eligibility cum Entrance Test', count: '2019–2025', accent: '#0f766e' },
-  { name: 'INI-CET', detail: 'Institute of National Importance', count: '2021–2025', accent: '#24558b' },
-  { name: 'FMGE', detail: 'Foreign Medical Graduate Examination', count: '2020–2025', accent: '#9a5a18' },
-];
-
-const recentPapers: Paper[] = [
-  { title: 'NEET PG 2025', type: 'Question paper', date: 'Added 2 days ago', color: '#e7f3f1' },
-  { title: 'INI-CET Nov 2024', type: 'Answer key', date: 'Added 5 days ago', color: '#e9eff8' },
-  { title: 'FMGE June 2024', type: 'Solutions', date: 'Added 1 week ago', color: '#fbf0df' },
-];
+type Paper = { id: string; title: string; description: string | null; paper_type: string; subject: string | null; storage_path: string; file_size: number; created_at: string; year: number };
+type User = { id: string; email?: string } | null;
+const colors = { ink: '#16364e', muted: '#718296', teal: '#0f766e', pale: '#e7f3f1', line: '#dce7ec', bg: '#f5f8fa', coral: '#d16b56' };
+const EXAM_NAME = 'PG Orthopaedics';
+const FILE_TYPES = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
 
 export default function App() {
-  const [query, setQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('Home');
-  const [selectedExam, setSelectedExam] = useState<string | null>(null);
-  const [selectedPaper, setSelectedPaper] = useState<string | null>(null);
-  const [savedPapers, setSavedPapers] = useState<string[]>([]);
-  const [showFilters, setShowFilters] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
   const { width } = useWindowDimensions();
-  const isWide = width >= 700;
-  const isDesktop = width >= 960;
-  const filteredExams = useMemo(
-    () => exams.filter((exam) => `${exam.name} ${exam.detail}`.toLowerCase().includes(query.toLowerCase())),
-    [query],
-  );
-  const filteredPapers = useMemo(
-    () => recentPapers.filter((paper) => `${paper.title} ${paper.type}`.toLowerCase().includes(query.toLowerCase())),
-    [query],
-  );
+  const [papers, setPapers] = useState<Paper[]>([]);
+  const [year, setYear] = useState<number | null>(null);
+  const [paper, setPaper] = useState<Paper | null>(null);
+  const [search, setSearch] = useState('');
+  const [admin, setAdmin] = useState(false);
+  const [user, setUser] = useState<User>(null);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState('');
 
-  const toggleSaved = (title: string) => {
-    setSavedPapers((current) => current.includes(title) ? current.filter((paper) => paper !== title) : [...current, title]);
+  const loadPapers = async () => {
+    if (!supabase) { setMessage('Supabase is not configured.'); setLoading(false); return; }
+    setLoading(true);
+    const { data, error } = await supabase.from('papers').select('id,title,description,paper_type,subject,storage_path,file_size,created_at,exam_years(year),exams(exam_name)').eq('is_published', true).order('created_at', { ascending: false });
+    if (error) setMessage(error.message);
+    else {
+      setMessage('');
+      setPapers((data ?? []).map((row: any) => ({ ...row, year: Array.isArray(row.exam_years) ? row.exam_years[0]?.year : row.exam_years?.year })).filter((item: Paper) => item.year));
+    }
+    setLoading(false);
   };
 
-  const openExam = (examName: string) => {
-    setSelectedExam(examName);
-    setActiveTab('Exams');
-  };
+  useEffect(() => {
+    loadPapers();
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ? { id: data.session.user.id, email: data.session.user.email } : null));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ? { id: session.user.id, email: session.user.email } : null));
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
-  const openPaper = (title: string) => setSelectedPaper(title);
+  const years = useMemo(() => [...new Set(papers.map((item) => item.year))].sort((a, b) => b - a), [papers]);
+  const visible = useMemo(() => papers.filter((item) => (year === null || item.year === year) && `${item.title} ${item.subject ?? ''} ${item.year}`.toLowerCase().includes(search.toLowerCase())), [papers, search, year]);
+  const signOut = async () => { await supabase?.auth.signOut(); setAdmin(false); };
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={[styles.content, isWide && styles.wideContent, isDesktop && styles.desktopContent]} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <View style={styles.brandLockup}>
-            <View style={styles.brandMark}><Text style={styles.brandMarkText}>+</Text></View>
-            <View><Text style={styles.brandName}>MedArchive</Text><Text style={styles.brandSubline}>CLINICAL PAPER LIBRARY</Text></View>
-          </View>
-          <Pressable style={styles.headerButton} onPress={() => setShowNotifications((visible) => !visible)}><Bell size={19} color="#27445b" strokeWidth={1.8} /><View style={styles.notificationDot} /></Pressable>
-          <Pressable style={styles.profileButton} onPress={() => setActiveTab('Profile')}><Text style={styles.profileButtonText}>S</Text></Pressable>
-        </View>
-
-        {showNotifications && <View style={styles.popover}><Text style={styles.popoverTitle}>Notifications</Text><Text style={styles.popoverText}>New papers will appear here when published.</Text><Pressable onPress={() => setShowNotifications(false)}><Text style={styles.popoverAction}>Dismiss</Text></Pressable></View>}
-
-        {activeTab === 'Home' && !selectedPaper && <View style={[styles.introRow, !isDesktop && styles.introRowMobile]}>
-          <View style={[styles.focusPanel, !isDesktop && styles.focusPanelMobile]}>
-            <View style={styles.focusCopy}>
-              <View style={styles.focusEyebrow}>
-                <Target size={13} color="#a8e1d7" />
-                <Text style={styles.focusEyebrowText}>GOOD MORNING, STUDENT</Text>
-              </View>
-              <Text style={styles.focusTitle}>Your revision desk</Text>
-              <Text style={styles.focusText}>A focused place for the papers that matter to your next attempt.</Text>
-              <View style={styles.focusStatus}>
-                <CheckCircle2 size={15} color="#9fe0d5" />
-                <Text style={styles.focusStatusText}>Ready to study</Text>
-              </View>
-            </View>
-            <View style={[styles.focusStats, !isDesktop && styles.focusStatsMobile]}>
-              <View style={styles.focusStat}><Text style={styles.focusStatValue}>03</Text><Text style={styles.focusStatLabel}>exams</Text></View>
-              <View style={styles.focusStatDivider} />
-              <View style={styles.focusStat}><Text style={styles.focusStatValue}>07</Text><Text style={styles.focusStatLabel}>years</Text></View>
-              <View style={styles.focusStatDivider} />
-              <View style={styles.focusStat}><Text style={styles.focusStatValue}>{String(savedPapers.length).padStart(2, '0')}</Text><Text style={styles.focusStatLabel}>saved</Text></View>
-            </View>
-          </View>
-        </View>}
-
-        {activeTab === 'Home' && !selectedPaper && <View style={styles.searchBox}>
-          <Search size={19} color="#718296" strokeWidth={2} />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search by exam, year or subject"
-            placeholderTextColor="#8b96a5"
-            style={styles.searchInput}
-          />
-          <Pressable style={[styles.filterButton, showFilters && styles.filterButtonActive]} onPress={() => setShowFilters((visible) => !visible)}><SlidersHorizontal size={17} color="#37647e" /></Pressable>
-        </View>}
-
-        {showFilters && activeTab === 'Home' && <View style={styles.filterPanel}><Text style={styles.filterPanelTitle}>Filter papers</Text><View style={styles.filterOptions}><Pressable style={styles.filterChip} onPress={() => setShowFilters(false)}><Text style={styles.filterChipText}>All years</Text></Pressable><Pressable style={styles.filterChip} onPress={() => setShowFilters(false)}><Text style={styles.filterChipText}>Question papers</Text></Pressable><Pressable style={styles.filterChip} onPress={() => setShowFilters(false)}><Text style={styles.filterChipText}>Solutions</Text></Pressable></View></View>}
-
-        {activeTab !== 'Home' && !selectedPaper && <WorkspaceView activeTab={activeTab} selectedExam={selectedExam} savedPapers={savedPapers} onBack={() => { setActiveTab('Home'); setSelectedExam(null); }} onOpenExam={openExam} onOpenPaper={openPaper} onToggleSaved={toggleSaved} />}
-        {selectedPaper && <PaperView title={selectedPaper} isSaved={savedPapers.includes(selectedPaper)} onBack={() => setSelectedPaper(null)} onToggleSaved={() => toggleSaved(selectedPaper)} />}
-
-        {activeTab === 'Home' && !selectedPaper && <><View style={[styles.homeColumns, isDesktop && styles.homeColumnsDesktop]}><View style={styles.primaryColumn}><View style={styles.sectionHeading}><View><Text style={styles.sectionKicker}>BROWSE BY EXAM</Text><Text style={styles.sectionTitle}>Examination papers</Text></View><Pressable onPress={() => setActiveTab('Exams')} style={styles.textAction}><Text style={styles.sectionAction}>View all</Text><ArrowRight size={14} color="#0f766e" /></Pressable></View>
-        <View style={[styles.examList, isDesktop && styles.examListWide, isDesktop && styles.examListDesktop]}>
-          {filteredExams.map((exam) => (
-            <Pressable key={exam.name} style={[styles.examRow, isDesktop && styles.examRowDesktop]} onPress={() => openExam(exam.name)}>
-              <View style={[styles.examIcon, { backgroundColor: exam.accent }]}><BookOpen size={18} color="#fff" strokeWidth={1.8} /></View>
-              <View style={styles.examCopy}><Text style={styles.examName}>{exam.name}</Text><Text style={styles.examDetail}>{exam.detail}</Text><Text style={styles.examCount}>{exam.count} · papers available</Text></View>
-              <ChevronRight size={19} color="#91a0ad" />
-            </Pressable>
-          ))}
-        </View>
-
-        <View style={[styles.sectionHeading, styles.recentHeading]}><View><Text style={styles.sectionKicker}>KEEP GOING</Text><Text style={styles.sectionTitle}>Recently added</Text></View><Pressable onPress={() => setActiveTab('Exams')} style={styles.textAction}><Text style={styles.sectionAction}>See all</Text><ArrowRight size={14} color="#0f766e" /></Pressable></View>
-        <View style={styles.paperList}>
-          {filteredPapers.map((paper) => (
-            <Pressable key={paper.title} style={styles.paperRow} onPress={() => openPaper(paper.title)}>
-              <View style={[styles.pdfBadge, { backgroundColor: paper.color }]}><FileText size={18} color="#356477" /></View>
-              <View style={styles.paperInfo}><Text style={styles.paperTitle}>{paper.title}</Text><Text style={styles.paperMeta}>{paper.type} · {paper.date}</Text></View>
-              <Pressable onPress={() => toggleSaved(paper.title)} hitSlop={10}><Bookmark size={18} color={savedPapers.includes(paper.title) ? '#0f766e' : '#9aa8b5'} fill={savedPapers.includes(paper.title) ? '#0f766e' : 'none'} strokeWidth={1.7} /></Pressable>
-            </Pressable>
-          ))}
-        </View>
-
-        <View style={styles.studyCard}>
-          <View style={styles.studyCardIcon}><Clock3 size={19} color="#0f766e" /></View>
-          <View style={styles.studyCardCopy}><Text style={styles.studyCardTitle}>Continue your preparation</Text><Text style={styles.studyCardText}>Save a paper to build your personal revision list.</Text></View>
-          <ArrowRight size={18} color="#0f766e" />
-        </View></View>{isDesktop && <View style={styles.desktopAside}><Text style={styles.sectionKicker}>STUDY SNAPSHOT</Text><Text style={styles.asideTitle}>Keep your next revision session close.</Text><Text style={styles.asideText}>Browse a year, open a paper, and save it to return to later.</Text><View style={styles.asideRule} /><View style={styles.asideStat}><Text style={styles.asideStatValue}>{savedPapers.length}</Text><Text style={styles.asideStatLabel}>saved papers</Text></View><Pressable style={styles.asideAction} onPress={() => setActiveTab('Saved')}><Text style={styles.asideActionText}>Open saved papers</Text><ArrowRight size={15} color="#0f766e" /></Pressable></View>}</View></>}
-      </ScrollView>
-
-      <View style={styles.tabBar}>
-        {['Home', 'Exams', 'Saved', 'Profile'].map((tab) => (
-          <Pressable key={tab} style={styles.tab} onPress={() => setActiveTab(tab)}>
-            {tab === 'Home' && <Home size={20} color={activeTab === tab ? '#0f766e' : '#9aa7b4'} strokeWidth={activeTab === tab ? 2.2 : 1.8} />}
-            {tab === 'Exams' && <Library size={20} color={activeTab === tab ? '#0f766e' : '#9aa7b4'} strokeWidth={activeTab === tab ? 2.2 : 1.8} />}
-            {tab === 'Saved' && <Bookmark size={20} color={activeTab === tab ? '#0f766e' : '#9aa7b4'} strokeWidth={activeTab === tab ? 2.2 : 1.8} />}
-            {tab === 'Profile' && <UserRound size={20} color={activeTab === tab ? '#0f766e' : '#9aa7b4'} strokeWidth={activeTab === tab ? 2.2 : 1.8} />}
-            <Text style={[styles.tabLabel, activeTab === tab && styles.tabLabelActive]}>{tab}</Text>
-          </Pressable>
-        ))}
+  return <SafeAreaView style={styles.safeArea}>
+    <StatusBar style="dark" />
+    <ScrollView contentContainerStyle={[styles.page, width >= 850 && styles.pageWide]} showsVerticalScrollIndicator={false}>
+      <View style={styles.topbar}>
+        <Pressable style={styles.brand} onPress={() => { setAdmin(false); setPaper(null); }}><View style={styles.brandMark}><Text style={styles.brandPlus}>+</Text></View><View><Text style={styles.brandName}>PG ORTHO</Text><Text style={styles.brandTag}>PREVIOUS YEAR PAPERS</Text></View></Pressable>
+        <Pressable style={[styles.adminButton, admin && styles.adminButtonActive]} onPress={() => { setAdmin(true); setPaper(null); }}><LockKeyhole size={15} color={admin ? colors.teal : colors.muted} /><Text style={[styles.adminButtonText, admin && styles.adminButtonTextActive]}>Admin</Text></Pressable>
       </View>
-    </SafeAreaView>
-  );
+      {admin ? <AdminPanel user={user} onSignOut={signOut} onUploaded={loadPapers} /> : paper ? <PaperDetail paper={paper} onBack={() => setPaper(null)} /> : <>
+        <View style={styles.hero}><Text style={styles.eyebrow}>ORTHOPAEDICS REVISION ARCHIVE</Text><Text style={styles.heroTitle}>Find the year.<Text style={styles.heroAccent}> Find the paper.</Text></Text><Text style={styles.heroText}>A clean archive of PG Orthopaedics previous-year question papers, arranged for fast revision.</Text><View style={styles.heroRule}><Text style={styles.heroRuleText}>{papers.length ? `${papers.length} published papers` : 'Your paper archive'}</Text><Text style={styles.heroRuleText}>{years.length ? `${years.length} years available` : 'Built for focused study'}</Text></View></View>
+        <View style={styles.sectionHeader}><View><Text style={styles.sectionKicker}>THE ARCHIVE</Text><Text style={styles.sectionTitle}>Choose a year</Text></View><Text style={styles.sectionMeta}>{years.length ? `${years[0]} to ${years[years.length - 1]}` : 'No papers yet'}</Text></View>
+        <View style={styles.searchBox}><Search size={18} color={colors.muted} /><TextInput value={search} onChangeText={setSearch} placeholder="Search year or paper title" placeholderTextColor="#91a0ad" style={styles.searchInput} /></View>
+        {message ? <View style={styles.message}><Text style={styles.messageText}>{message}</Text></View> : null}
+        {loading ? <Text style={styles.empty}>Loading the archive...</Text> : years.length === 0 ? <View style={styles.emptyPanel}><FolderOpen size={26} color={colors.teal} /><Text style={styles.emptyTitle}>Your archive is ready</Text><Text style={styles.emptyText}>Sign in as admin to publish the first paper.</Text></View> : <View style={styles.yearGrid}>{years.map((item) => <Pressable key={item} style={[styles.yearCard, year === item && styles.yearCardActive]} onPress={() => setYear(year === item ? null : item)}><View><Text style={[styles.yearNumber, year === item && styles.yearNumberActive]}>{item}</Text><Text style={[styles.yearLabel, year === item && styles.yearLabelActive]}>{papers.filter((entry) => entry.year === item).length} paper{papers.filter((entry) => entry.year === item).length === 1 ? '' : 's'}</Text></View><ChevronRight size={19} color={year === item ? '#fff' : colors.teal} /></Pressable>)}</View>}
+        {year !== null && <View style={styles.paperSection}><View style={styles.sectionHeader}><View><Text style={styles.sectionKicker}>YEAR {year}</Text><Text style={styles.sectionTitle}>Available papers</Text></View><Pressable onPress={() => setYear(null)}><X size={19} color={colors.muted} /></Pressable></View>{visible.length ? visible.map((item) => <Pressable key={item.id} style={styles.paperRow} onPress={() => setPaper(item)}><View style={styles.paperIcon}><FileText size={20} color={colors.teal} /></View><View style={styles.paperCopy}><Text style={styles.paperTitle}>{item.title}</Text><Text style={styles.paperMeta}>{item.subject || 'PG Orthopaedics'} · {item.paper_type.replace('_', ' ')}</Text></View><ArrowUpRight size={18} color={colors.teal} /></Pressable>) : <Text style={styles.empty}>No matching paper for this year.</Text>}</View>}
+      </>}
+    </ScrollView>
+    <View style={styles.footer}><Text style={styles.footerStrong}>PG ORTHO</Text><Text style={styles.footerText}>A focused paper archive for serious revision.</Text></View>
+  </SafeAreaView>;
 }
 
-function WorkspaceView({ activeTab, selectedExam, savedPapers, onBack, onOpenExam, onOpenPaper, onToggleSaved }: { activeTab: string; selectedExam: string | null; savedPapers: string[]; onBack: () => void; onOpenExam: (name: string) => void; onOpenPaper: (title: string) => void; onToggleSaved: (title: string) => void }) {
-  const paperItems = recentPapers.filter((paper) => !selectedExam || paper.title.startsWith(selectedExam.split(' ')[0]));
-  const visiblePapers = activeTab === 'Saved' ? recentPapers.filter((paper) => savedPapers.includes(paper.title)) : paperItems;
-  const heading = activeTab === 'Saved' ? 'Saved papers' : activeTab === 'Profile' ? 'Your profile' : selectedExam || 'All examinations';
-  const kicker = activeTab === 'Saved' ? 'YOUR LIBRARY' : activeTab === 'Profile' ? 'ACCOUNT' : 'EXAMINATION LIBRARY';
-
-  return <View style={styles.workspace}>
-    <Pressable style={styles.backButton} onPress={onBack}><ArrowLeft size={16} color="#0f766e" /><Text style={styles.backButtonText}>Back to home</Text></Pressable>
-    <Text style={styles.eyebrow}>{kicker}</Text>
-    <Text style={styles.workspaceTitle}>{heading}</Text>
-    {activeTab === 'Profile' ? <ProfilePanel /> : <View style={styles.workspaceList}>
-      {visiblePapers.map((paper) => <PaperRow key={paper.title} paper={paper} isSaved={savedPapers.includes(paper.title)} onOpen={() => onOpenPaper(paper.title)} onToggle={() => onToggleSaved(paper.title)} />)}
-      {activeTab === 'Saved' && savedPapers.length === 0 && <Text style={styles.emptyText}>No saved papers yet. Tap the bookmark beside a paper to keep it here.</Text>}
-      {activeTab === 'Exams' && !selectedExam && <View style={styles.examList}>{exams.map((exam) => <ExamRow key={exam.name} exam={exam} onOpen={() => onOpenExam(exam.name)} />)}</View>}
-    </View>}
-  </View>;
+function PaperDetail({ paper, onBack }: { paper: Paper; onBack: () => void }) {
+  const [message, setMessage] = useState('');
+  const openFile = async () => { if (!supabase) return; const { data, error } = await supabase.storage.from('papers').createSignedUrl(paper.storage_path, 3600); if (error) setMessage(error.message); else if (data?.signedUrl) await Linking.openURL(data.signedUrl); };
+  return <View style={styles.detail}><Pressable style={styles.back} onPress={onBack}><ArrowLeft size={17} color={colors.teal} /><Text style={styles.backText}>Back to years</Text></Pressable><Text style={styles.eyebrow}>YEAR {paper.year} · PG ORTHOPAEDICS</Text><Text style={styles.detailTitle}>{paper.title}</Text><Text style={styles.detailText}>{paper.description || 'Previous-year question paper for focused revision.'}</Text><View style={styles.detailMeta}><View><Text style={styles.metaLabel}>FILE TYPE</Text><Text style={styles.metaValue}>{paper.storage_path.split('.').pop()?.toUpperCase()}</Text></View><View><Text style={styles.metaLabel}>ADDED</Text><Text style={styles.metaValue}>{new Date(paper.created_at).toLocaleDateString()}</Text></View></View><Pressable style={styles.openButton} onPress={openFile}><BookOpen size={17} color="#fff" /><Text style={styles.openButtonText}>Open paper</Text><ArrowUpRight size={16} color="#fff" /></Pressable>{message ? <Text style={styles.messageText}>{message}</Text> : null}</View>;
 }
 
-function PaperRow({ paper, isSaved, onOpen, onToggle }: { paper: Paper; isSaved: boolean; onOpen: () => void; onToggle: () => void }) {
-  return <Pressable style={styles.paperRow} onPress={onOpen}><View style={[styles.pdfBadge, { backgroundColor: paper.color }]}><FileText size={18} color="#356477" /></View><View style={styles.paperInfo}><Text style={styles.paperTitle}>{paper.title}</Text><Text style={styles.paperMeta}>{paper.type} · {paper.date}</Text></View><Pressable onPress={onToggle} hitSlop={10}><Bookmark size={18} color={isSaved ? '#0f766e' : '#9aa8b5'} fill={isSaved ? '#0f766e' : 'none'} /></Pressable></Pressable>;
-}
-
-function ExamRow({ exam, onOpen }: { exam: Exam; onOpen: () => void }) {
-  return <Pressable style={styles.examRow} onPress={onOpen}><View style={[styles.examIcon, { backgroundColor: exam.accent }]}><BookOpen size={18} color="#fff" /></View><View style={styles.examCopy}><Text style={styles.examName}>{exam.name}</Text><Text style={styles.examDetail}>{exam.detail}</Text><Text style={styles.examCount}>{exam.count} · papers available</Text></View><ChevronRight size={19} color="#91a0ad" /></Pressable>;
-}
-
-function ProfilePanel() {
-  return <View style={styles.profilePanel}><View style={styles.largeAvatar}><Text style={styles.profileButtonText}>S</Text></View><Text style={styles.profileName}>Student account</Text><Text style={styles.profileMeta}>Sign in to sync your papers and progress.</Text><Pressable style={styles.primaryAction} onPress={() => Alert.alert('Sign in', 'Authentication will connect to Supabase in the next step.')}><Text style={styles.primaryActionText}>Sign in</Text></Pressable></View>;
-}
-
-function PaperView({ title, isSaved, onBack, onToggleSaved }: { title: string; isSaved: boolean; onBack: () => void; onToggleSaved: () => void }) {
-  return <View style={styles.paperView}><Pressable style={styles.backButton} onPress={onBack}><ArrowLeft size={16} color="#0f766e" /><Text style={styles.backButtonText}>Back to papers</Text></Pressable><View style={styles.paperHero}><View style={styles.largePdfBadge}><FileText size={28} color="#0f766e" /></View><Text style={styles.workspaceTitle}>{title}</Text><Text style={styles.paperViewMeta}>PDF resource · Available to read</Text><View style={styles.paperActions}><Pressable style={styles.primaryAction} onPress={() => Alert.alert('Open paper', 'PDF viewing will load from Supabase Storage after the paper is published.')}><Text style={styles.primaryActionText}>Open paper</Text></Pressable><Pressable style={styles.secondaryAction} onPress={onToggleSaved}><Bookmark size={16} color="#0f766e" fill={isSaved ? '#0f766e' : 'none'} /><Text style={styles.secondaryActionText}>{isSaved ? 'Saved' : 'Save paper'}</Text></Pressable></View></View><View style={styles.viewerPlaceholder}><FileText size={28} color="#94a4b2" /><Text style={styles.viewerTitle}>PDF viewer ready</Text><Text style={styles.viewerText}>Connect this resource to Supabase Storage to load the document here.</Text></View></View>;
+function AdminPanel({ user, onSignOut, onUploaded }: { user: User; onSignOut: () => void; onUploaded: () => void }) {
+  const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [file, setFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null); const [title, setTitle] = useState(''); const [year, setYear] = useState(''); const [subject, setSubject] = useState(''); const [status, setStatus] = useState(''); const [busy, setBusy] = useState(false);
+  const signIn = async () => { if (!supabase) return; setBusy(true); const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password }); setStatus(error ? error.message : 'Signed in.'); setBusy(false); };
+  const choose = async () => { const result = await DocumentPicker.getDocumentAsync({ type: FILE_TYPES, copyToCacheDirectory: true }); if (!result.canceled) setFile(result.assets[0]); };
+  const upload = async () => {
+    if (!supabase || !user) return setStatus('Sign in before uploading.'); if (!file || !title.trim() || !year.trim()) return setStatus('Choose a file and enter title and year.'); const numericYear = Number(year); if (!Number.isInteger(numericYear) || numericYear < 1900) return setStatus('Enter a valid year.');
+    setBusy(true); setStatus('Uploading...'); const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-'); const path = `${user.id}/${Date.now()}-${safeName}`; const blob = await fetch(file.uri).then((response) => response.blob()); const stored = await supabase.storage.from('papers').upload(path, blob, { contentType: file.mimeType || 'application/octet-stream' });
+    if (stored.error) { setStatus(stored.error.message); setBusy(false); return; }
+    const exam = await supabase.from('exams').select('id').eq('exam_name', EXAM_NAME).single(); if (exam.error || !exam.data) { setStatus('Run the PG Orthopaedics seed migration first.'); setBusy(false); return; }
+    const examYear = await supabase.from('exam_years').upsert({ exam_id: exam.data.id, year: numericYear }, { onConflict: 'exam_id,year' }).select('id').single(); if (examYear.error || !examYear.data) { setStatus(examYear.error?.message || 'Could not save year.'); setBusy(false); return; }
+    const inserted = await supabase.from('papers').insert({ exam_id: exam.data.id, exam_year_id: examYear.data.id, title: title.trim(), subject: subject.trim() || null, paper_type: 'question_paper', storage_path: path, file_size: file.size || blob.size, is_published: true, uploaded_by: user.id });
+    if (inserted.error) { await supabase.storage.from('papers').remove([path]); setStatus(inserted.error.message); } else { setStatus('Published successfully.'); setTitle(''); setYear(''); setSubject(''); setFile(null); onUploaded(); } setBusy(false);
+  };
+  return <View style={styles.admin}><View style={styles.adminHeader}><View><Text style={styles.eyebrow}>PRIVATE AREA</Text><Text style={styles.detailTitle}>Manage the archive</Text></View>{user ? <Pressable onPress={onSignOut} style={styles.signOut}><LogOut size={15} color={colors.teal} /><Text style={styles.signOutText}>Sign out</Text></Pressable> : null}</View>{!user ? <View style={styles.auth}><ShieldCheck size={25} color={colors.teal} /><Text style={styles.authTitle}>Admin sign in</Text><Text style={styles.authText}>Only your Supabase admin account can publish papers.</Text><TextInput value={email} onChangeText={setEmail} placeholder="Email" placeholderTextColor="#91a0ad" style={styles.input} autoCapitalize="none" /><TextInput value={password} onChangeText={setPassword} placeholder="Password" placeholderTextColor="#91a0ad" style={styles.input} secureTextEntry /><Pressable style={styles.openButton} onPress={signIn} disabled={busy}><Text style={styles.openButtonText}>{busy ? 'Signing in...' : 'Sign in'}</Text></Pressable></View> : <View style={styles.upload}><View style={styles.uploadHeading}><Upload size={20} color={colors.teal} /><Text style={styles.authTitle}>Publish a paper</Text></View><Pressable style={styles.filePicker} onPress={choose}><FileText size={20} color={colors.teal} /><Text style={styles.fileText}>{file?.name || 'Choose PDF or DOCX'}</Text></Pressable><TextInput value={title} onChangeText={setTitle} placeholder="Paper title" placeholderTextColor="#91a0ad" style={styles.input} /><TextInput value={year} onChangeText={setYear} placeholder="Year, e.g. 1996" placeholderTextColor="#91a0ad" style={styles.input} keyboardType="numeric" /><TextInput value={subject} onChangeText={setSubject} placeholder="Subject (optional)" placeholderTextColor="#91a0ad" style={styles.input} /><Pressable style={styles.openButton} onPress={upload} disabled={busy}><Check size={17} color="#fff" /><Text style={styles.openButtonText}>{busy ? 'Publishing...' : 'Publish paper'}</Text></Pressable></View>}{status ? <Text style={styles.status}>{status}</Text> : null}</View>;
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-  },
-  content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 112 },
-  wideContent: { width: '100%', maxWidth: 1180, alignSelf: 'center', paddingHorizontal: 32 },
-  desktopContent: { paddingHorizontal: 44 },
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 34 },
-  brandLockup: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  brandMark: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#123b55', alignItems: 'center', justifyContent: 'center' },
-  brandMarkText: { color: '#bce6df', fontSize: 23, fontWeight: '700', lineHeight: 26 },
-  brandName: { color: '#16364e', fontSize: 16, fontWeight: '800', letterSpacing: 0.1 },
-  brandSubline: { color: '#8392a1', fontSize: 7, fontWeight: '800', letterSpacing: 1.1, marginTop: 3 },
-  headerButton: { marginLeft: 'auto', width: 36, height: 36, borderRadius: 10, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e5ebf0' },
-  notificationDot: { position: 'absolute', top: 8, right: 8, width: 5, height: 5, borderRadius: 3, backgroundColor: '#d16b56' },
-  popover: { position: 'absolute', top: 64, right: 20, zIndex: 5, width: 235, padding: 14, borderRadius: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: '#dfe8ed', shadowColor: '#17344c', shadowOpacity: 0.12, shadowRadius: 12, elevation: 4 },
-  popoverTitle: { color: '#16364e', fontSize: 13, fontWeight: '800' },
-  popoverText: { color: '#70808d', fontSize: 11, lineHeight: 16, marginTop: 6 },
-  popoverAction: { color: '#0f766e', fontSize: 11, fontWeight: '800', marginTop: 10 },
-  profileButton: { marginLeft: 9, width: 36, height: 36, borderRadius: 10, backgroundColor: '#dcefeb', alignItems: 'center', justifyContent: 'center' },
-  profileButtonText: { color: '#176a68', fontWeight: '800', fontSize: 13 },
-  introRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 18 },
-  introRowMobile: { flexDirection: 'column', alignItems: 'flex-start' },
-  focusPanel: { width: '100%', minHeight: 178, borderRadius: 18, backgroundColor: '#123b55', padding: 22, flexDirection: 'row', alignItems: 'stretch', justifyContent: 'space-between', marginBottom: 26, overflow: 'hidden' },
-  focusPanelMobile: { flexDirection: 'column', minHeight: 218 },
-  focusCopy: { flex: 1, maxWidth: 470 },
-  focusEyebrow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  focusEyebrowText: { color: '#a8e1d7', fontSize: 9, fontWeight: '800', letterSpacing: 1.4 },
-  focusTitle: { color: '#fff', fontSize: 29, lineHeight: 35, fontWeight: '800', marginTop: 13 },
-  focusText: { color: '#bdd2d8', fontSize: 12, lineHeight: 18, marginTop: 7, maxWidth: 350 },
-  focusStatus: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 18 },
-  focusStatusText: { color: '#c4e9e3', fontSize: 11, fontWeight: '800' },
-  focusStats: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', paddingLeft: 22, paddingBottom: 3 },
-  focusStatsMobile: { alignSelf: 'flex-start', paddingLeft: 0, paddingBottom: 0, marginTop: 18 },
-  focusStat: { minWidth: 52, alignItems: 'center' },
-  focusStatValue: { color: '#fff', fontSize: 22, fontWeight: '800' },
-  focusStatLabel: { color: '#a8c6ce', fontSize: 10, fontWeight: '700', marginTop: 3 },
-  focusStatDivider: { width: 1, height: 34, backgroundColor: '#41657a', marginHorizontal: 10 },
-  eyebrow: { color: '#0f766e', fontSize: 9, fontWeight: '800', letterSpacing: 1.4, marginBottom: 7 },
-  title: { color: '#16364e', fontSize: 27, lineHeight: 33, fontWeight: '800' },
-  studyStatus: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 3 },
-  studyStatusText: { color: '#157a70', fontSize: 10, fontWeight: '700' },
-  searchBox: { height: 50, borderWidth: 1, borderColor: '#dde6ec', backgroundColor: '#fff', borderRadius: 12, flexDirection: 'row', alignItems: 'center', paddingLeft: 14, paddingRight: 6, marginBottom: 32 },
-  searchInput: { flex: 1, color: '#16364e', fontSize: 13, marginLeft: 10 },
-  filterButton: { width: 38, height: 38, borderRadius: 9, backgroundColor: '#eff6f6', alignItems: 'center', justifyContent: 'center' },
-  filterButtonActive: { backgroundColor: '#d9eeeb' },
-  filterPanel: { padding: 13, marginTop: -20, marginBottom: 25, borderRadius: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: '#dfe8ed' },
-  filterPanelTitle: { color: '#16364e', fontSize: 12, fontWeight: '800', marginBottom: 10 },
-  filterOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  filterChip: { paddingVertical: 7, paddingHorizontal: 10, borderRadius: 8, backgroundColor: '#eff6f6' },
-  filterChipText: { color: '#27666b', fontSize: 10, fontWeight: '700' },
-  sectionHeading: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 13 },
-  recentHeading: { marginTop: 29 },
-  sectionKicker: { color: '#82919e', fontSize: 9, fontWeight: '800', letterSpacing: 1.3, marginBottom: 5 },
-  sectionTitle: { color: '#16364e', fontSize: 18, fontWeight: '800' },
-  textAction: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingBottom: 2 },
-  sectionAction: { color: '#0f766e', fontSize: 11, fontWeight: '800' },
-  homeColumns: { alignItems: 'stretch' },
-  homeColumnsDesktop: { flexDirection: 'row', alignItems: 'flex-start', gap: 28 },
-  primaryColumn: { flex: 1, minWidth: 0 },
-  desktopAside: { width: 260, marginTop: 29, padding: 20, borderRadius: 14, backgroundColor: '#eaf5f3', borderWidth: 1, borderColor: '#d4ebe6' },
-  asideTitle: { color: '#164d55', fontSize: 18, lineHeight: 24, fontWeight: '800', marginTop: 9 },
-  asideText: { color: '#628189', fontSize: 12, lineHeight: 18, marginTop: 8 },
-  asideRule: { height: 1, backgroundColor: '#cde4df', marginVertical: 18 },
-  asideStat: { flexDirection: 'row', alignItems: 'baseline', gap: 7 },
-  asideStatValue: { color: '#0f766e', fontSize: 25, fontWeight: '800' },
-  asideStatLabel: { color: '#628189', fontSize: 11, fontWeight: '700' },
-  asideAction: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 18 },
-  asideActionText: { color: '#0f766e', fontSize: 11, fontWeight: '800' },
-  examList: { gap: 9 },
-  examListWide: { flexDirection: 'row', flexWrap: 'wrap' },
-  examListDesktop: { gap: 12 },
-  examRow: { minHeight: 76, backgroundColor: '#fff', borderRadius: 13, borderWidth: 1, borderColor: '#e3eaf0', flexDirection: 'row', alignItems: 'center', padding: 12 },
-  examRowDesktop: { flexGrow: 1, flexBasis: 240 },
-  examIcon: { width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  examCopy: { flex: 1, marginLeft: 12 },
-  examName: { color: '#16364e', fontSize: 14, fontWeight: '800', marginBottom: 3 },
-  examDetail: { color: '#6d7d8c', fontSize: 10, lineHeight: 14 },
-  examCount: { color: '#0f766e', fontSize: 9, fontWeight: '700', marginTop: 4 },
-  paperList: { gap: 8, marginBottom: 24 },
-  paperRow: { minHeight: 66, backgroundColor: '#fff', borderRadius: 13, borderWidth: 1, borderColor: '#e3eaf0', flexDirection: 'row', alignItems: 'center', padding: 11 },
-  pdfBadge: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  paperInfo: { flex: 1, marginLeft: 12 },
-  paperTitle: { color: '#16364e', fontSize: 13, fontWeight: '800' },
-  paperMeta: { color: '#82919e', fontSize: 10, marginTop: 4 },
-  studyCard: { minHeight: 70, backgroundColor: '#eaf5f3', borderRadius: 13, padding: 13, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#d4ebe6' },
-  studyCardIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  studyCardCopy: { flex: 1, marginLeft: 11 },
-  studyCardTitle: { color: '#164d55', fontSize: 12, fontWeight: '800' },
-  studyCardText: { color: '#628189', fontSize: 10, marginTop: 4 },
-  workspace: { paddingTop: 2, paddingBottom: 35 },
-  backButton: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginBottom: 26 },
-  backButtonText: { color: '#0f766e', fontSize: 12, fontWeight: '800' },
-  workspaceTitle: { color: '#16364e', fontSize: 27, lineHeight: 33, fontWeight: '800', marginBottom: 22 },
-  workspaceList: { gap: 9 },
-  emptyText: { color: '#70808d', fontSize: 12, lineHeight: 18, padding: 16, borderRadius: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3eaf0' },
-  profilePanel: { alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e3eaf0', padding: 24 },
-  largeAvatar: { width: 64, height: 64, borderRadius: 20, backgroundColor: '#dcefeb', alignItems: 'center', justifyContent: 'center', marginBottom: 13 },
-  profileName: { color: '#16364e', fontSize: 16, fontWeight: '800' },
-  profileMeta: { color: '#70808d', fontSize: 12, marginTop: 6, textAlign: 'center' },
-  primaryAction: { backgroundColor: '#0f766e', borderRadius: 9, paddingVertical: 11, paddingHorizontal: 22, marginTop: 18 },
-  primaryActionText: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  paperView: { paddingTop: 2, paddingBottom: 35 },
-  paperHero: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e3eaf0', padding: 20, alignItems: 'center' },
-  largePdfBadge: { width: 60, height: 60, borderRadius: 16, backgroundColor: '#e7f3f1', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
-  paperViewMeta: { color: '#70808d', fontSize: 11, marginTop: -13, marginBottom: 18 },
-  paperActions: { flexDirection: 'row', alignItems: 'center', gap: 9 },
-  secondaryAction: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: '#cfe2df', borderRadius: 9, paddingVertical: 10, paddingHorizontal: 12 },
-  secondaryActionText: { color: '#0f766e', fontSize: 11, fontWeight: '800' },
-  viewerPlaceholder: { alignItems: 'center', justifyContent: 'center', minHeight: 180, marginTop: 12, borderRadius: 14, borderWidth: 1, borderColor: '#e3eaf0', borderStyle: 'dashed', backgroundColor: '#f5f8fa' },
-  viewerTitle: { color: '#506978', fontSize: 13, fontWeight: '800', marginTop: 10 },
-  viewerText: { color: '#84939d', fontSize: 11, marginTop: 5, textAlign: 'center', maxWidth: 250 },
-  tabBar: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 78, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#e4ebef', flexDirection: 'row', justifyContent: 'space-around', paddingTop: 12 },
-  tab: { alignItems: 'center', width: 70, gap: 5 },
-  tabLabel: { color: '#9aa7b4', fontSize: 10, fontWeight: '700' },
-  tabLabelActive: { color: '#0f766e' },
+  safeArea: { flex: 1, backgroundColor: colors.bg }, page: { padding: 22, paddingBottom: 92 }, pageWide: { width: '100%', maxWidth: 1060, alignSelf: 'center', paddingHorizontal: 48 }, topbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 52 }, brand: { flexDirection: 'row', alignItems: 'center', gap: 11 }, brandMark: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' }, brandPlus: { color: '#bce6df', fontSize: 28, fontWeight: '700' }, brandName: { color: colors.ink, fontSize: 16, fontWeight: '900', letterSpacing: 1 }, brandTag: { color: '#8797a5', fontSize: 8, fontWeight: '800', letterSpacing: 1.3, marginTop: 3 }, adminButton: { flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderColor: colors.line, backgroundColor: '#fff', borderRadius: 9, paddingVertical: 9, paddingHorizontal: 12 }, adminButtonActive: { backgroundColor: colors.pale, borderColor: '#c6e4df' }, adminButtonText: { color: colors.muted, fontSize: 11, fontWeight: '800' }, adminButtonTextActive: { color: colors.teal }, hero: { backgroundColor: colors.ink, borderRadius: 18, padding: 27, marginBottom: 35 }, eyebrow: { color: colors.teal, fontSize: 9, fontWeight: '900', letterSpacing: 1.5, marginBottom: 9 }, heroTitle: { color: '#fff', fontSize: 38, lineHeight: 43, fontWeight: '900', maxWidth: 610 }, heroAccent: { color: '#a8e1d7' }, heroText: { color: '#c4d5da', fontSize: 13, lineHeight: 20, marginTop: 12, maxWidth: 500 }, heroRule: { flexDirection: 'row', gap: 25, borderTopWidth: 1, borderTopColor: '#36586a', marginTop: 25, paddingTop: 15 }, heroRuleText: { color: '#b6d2d4', fontSize: 11, fontWeight: '700' }, sectionHeader: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 13 }, sectionKicker: { color: '#82919e', fontSize: 9, fontWeight: '900', letterSpacing: 1.4, marginBottom: 5 }, sectionTitle: { color: colors.ink, fontSize: 22, fontWeight: '900' }, sectionMeta: { color: colors.muted, fontSize: 11, marginBottom: 3 }, searchBox: { flexDirection: 'row', alignItems: 'center', gap: 9, height: 48, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line, borderRadius: 10, paddingHorizontal: 14, marginBottom: 18 }, searchInput: { flex: 1, color: colors.ink, fontSize: 13 }, yearGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, yearCard: { flexGrow: 1, flexBasis: 145, minHeight: 86, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line, borderRadius: 12, padding: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, yearCardActive: { backgroundColor: colors.teal, borderColor: colors.teal }, yearNumber: { color: colors.ink, fontSize: 25, fontWeight: '900' }, yearNumberActive: { color: '#fff' }, yearLabel: { color: colors.muted, fontSize: 10, marginTop: 4 }, yearLabelActive: { color: '#c5e5e0' }, paperSection: { marginTop: 35 }, paperRow: { minHeight: 72, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line, borderRadius: 12, padding: 13, flexDirection: 'row', alignItems: 'center', marginBottom: 9 }, paperIcon: { width: 42, height: 42, borderRadius: 10, backgroundColor: colors.pale, alignItems: 'center', justifyContent: 'center' }, paperCopy: { flex: 1, marginLeft: 12 }, paperTitle: { color: colors.ink, fontSize: 13, fontWeight: '900' }, paperMeta: { color: colors.muted, fontSize: 10, marginTop: 5, textTransform: 'capitalize' }, empty: { color: colors.muted, fontSize: 12, paddingVertical: 20 }, emptyPanel: { alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line, borderRadius: 14, padding: 30 }, emptyTitle: { color: colors.ink, fontSize: 16, fontWeight: '900', marginTop: 11 }, emptyText: { color: colors.muted, fontSize: 12, marginTop: 6 }, message: { padding: 12, backgroundColor: '#fff5f1', borderRadius: 9, marginBottom: 14 }, messageText: { color: colors.coral, fontSize: 11, textAlign: 'center' }, detail: { backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line, borderRadius: 16, padding: 25 }, back: { flexDirection: 'row', gap: 7, alignItems: 'center', alignSelf: 'flex-start', marginBottom: 34 }, backText: { color: colors.teal, fontSize: 12, fontWeight: '900' }, detailTitle: { color: colors.ink, fontSize: 30, lineHeight: 36, fontWeight: '900' }, detailText: { color: colors.muted, fontSize: 13, lineHeight: 20, marginTop: 12, maxWidth: 570 }, detailMeta: { flexDirection: 'row', gap: 45, borderTopWidth: 1, borderTopColor: colors.line, marginTop: 25, paddingTop: 17 }, metaLabel: { color: '#8a9aa6', fontSize: 9, fontWeight: '900', letterSpacing: 1.1 }, metaValue: { color: colors.ink, fontSize: 12, fontWeight: '800', marginTop: 5 }, openButton: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.teal, borderRadius: 9, paddingVertical: 12, paddingHorizontal: 16, marginTop: 23 }, openButtonText: { color: '#fff', fontSize: 12, fontWeight: '900' }, admin: { backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line, borderRadius: 16, padding: 23 }, adminHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }, signOut: { flexDirection: 'row', gap: 6, alignItems: 'center', padding: 8 }, signOutText: { color: colors.teal, fontSize: 11, fontWeight: '900' }, auth: { alignItems: 'flex-start', maxWidth: 510, marginTop: 18 }, authTitle: { color: colors.ink, fontSize: 17, fontWeight: '900', marginTop: 10 }, authText: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 6 }, input: { width: '100%', height: 45, borderWidth: 1, borderColor: colors.line, borderRadius: 9, paddingHorizontal: 12, color: colors.ink, backgroundColor: '#fbfdfe', fontSize: 12, marginTop: 10 }, upload: { maxWidth: 610, marginTop: 18 }, uploadHeading: { flexDirection: 'row', alignItems: 'center', gap: 8 }, filePicker: { minHeight: 55, borderWidth: 1, borderStyle: 'dashed', borderColor: '#b9dbd6', borderRadius: 10, paddingHorizontal: 14, flexDirection: 'row', gap: 9, alignItems: 'center', marginTop: 17 }, fileText: { color: colors.teal, fontSize: 12, fontWeight: '800' }, status: { color: colors.muted, fontSize: 11, marginTop: 14 }, footer: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 54, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: colors.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 }, footerStrong: { color: colors.ink, fontSize: 10, fontWeight: '900', letterSpacing: 1 }, footerText: { color: '#8a9aa6', fontSize: 10 },
 });

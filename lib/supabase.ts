@@ -10,7 +10,7 @@ export const supabase = supabaseUrl && supabaseAnonKey
         storage: undefined,
         autoRefreshToken: true,
         persistSession: true,
-        detectSessionInUrl: false,
+        detectSessionInUrl: true,
       },
     })
   : null;
