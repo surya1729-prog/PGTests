@@ -3,7 +3,7 @@ create table if not exists public.question_papers (
   exam_id uuid not null references public.exams(id) on delete cascade,
   year integer not null check (year between 1900 and 2100),
   session text not null,
-  paper_number integer not null check (paper_number between 1 and 2),
+  paper_number integer not null check (paper_number between 1 and 4),
   title text not null,
   is_published boolean not null default true,
   created_at timestamptz not null default now(),
